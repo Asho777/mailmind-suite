@@ -1,0 +1,202 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id              String             @id @default(cuid())
+  email           String             @unique
+  name            String?
+  role            String?
+  company         String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  plan            String             @default("free")
+  accounts        ConnectedAccount[]
+  automationRules AutomationRule[]
+  templates       Template[]
+  styleProfile    UserStyleProfile?
+  preferences     LearnedPreference[]
+  analyticsEvents AnalyticsEvent[]
+}
+
+model ConnectedAccount {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider     String   // "gmail", "outlook", "imap"
+  emailAddress String
+  accessToken  String?
+  refreshToken String?
+  tokenExpiry  DateTime?
+  isActive     Boolean  @default(true)
+  lastSyncedAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  emails       Email[]
+
+  @@unique([userId, emailAddress])
+}
+
+model Email {
+  id             String         @id @default(cuid())
+  accountId      String
+  account        ConnectedAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  gmailMessageId String?
+  threadId       String?
+  from           String
+  to             String
+  cc             String?
+  bcc            String?
+  subject        String?
+  bodyText       String?
+  bodyHtml       String?
+  receivedAt     DateTime
+  isRead         Boolean        @default(false)
+  isStarred      Boolean        @default(false)
+  labels         Json?
+  status         String         @default("new") // "new", "analysed", "draft_ready", "sent", "archived", "snoozed"
+  analysis       EmailAnalysis?
+  drafts         EmailDraft[]
+  followUps      FollowUp[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+model EmailAnalysis {
+  id                String   @id @default(cuid())
+  emailId           String   @unique
+  email             Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  emailType         String?
+  priority          Int?
+  priorityReason    String?
+  summary           Json?
+  tone              String?
+  intent            String?
+  extractedEntities Json?
+  recommendedAction String?
+  shouldAutoReply   Boolean  @default(false)
+  confidenceScore   Float?
+  createdAt         DateTime @default(now())
+}
+
+model EmailDraft {
+  id               String   @id @default(cuid())
+  emailId          String
+  email            Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  draftBody        String
+  originalAiDraft  String?
+  userEditedDraft  String?
+  diffSummary      String?
+  status           String   @default("pending") // "pending", "approved", "sent", "discarded"
+  sentAt           DateTime?
+  aiConfidence     Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Contact {
+  id                     String   @id @default(cuid())
+  userId                 String
+  email                  String
+  name                   String?
+  company                String?
+  relationshipType       String?
+  communicationFrequency Int      @default(0)
+  avgResponseTime        Float?
+  firstSeenAt            DateTime @default(now())
+  lastInteractionAt      DateTime @default(now())
+  notes                  String?
+
+  @@unique([userId, email])
+}
+
+model UserStyleProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tone              String?
+  lengthPreference  String?
+  signOff           String?
+  preferredPhrases  Json?
+  avoidedPhrases    Json?
+  topics            Json?
+  languages         Json?
+  confidenceScore   Float    @default(0)
+  lastUpdatedAt     DateTime @updatedAt
+}
+
+model LearnedPreference {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferenceType  String
+  preferenceValue String
+  confidenceScore Float
+  sourceCount     Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model AutomationRule {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  isActive            Boolean  @default(true)
+  triggerConditions   Json
+  actions             Json
+  confidenceThreshold Float    @default(0.8)
+  timesTriggered      Int      @default(0)
+  createdAt           DateTime @default(now())
+}
+
+model Template {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  subject    String?
+  body       String
+  variables  Json?
+  usageCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model FollowUp {
+  id        String   @id @default(cuid())
+  emailId   String
+  email     Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  userId    String
+  dueAt     DateTime
+  message   String?
+  status    String   @default("pending") // "pending", "sent", "dismissed"
+  createdAt DateTime @default(now())
+}
+
+model AiPrompt {
+  id         String   @id @default(cuid())
+  agentName  String
+  promptText String
+  version    Int      @default(1)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventType  String
+  metadata   Json?
+  occurredAt DateTime @default(now())
+}

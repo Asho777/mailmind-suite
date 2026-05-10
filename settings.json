@@ -1,0 +1,22 @@
+{
+  "name": "Greg Ashley",
+  "email": "navcocctv@bigpond.com",
+  "role": "Managing Director",
+  "company": "NAVCO Australia",
+  "plan": "Professional",
+  "styleProfile": {
+    "tone": "Semi-Formal",
+    "lengthPreference": "Balanced",
+    "signOff": "Best regards, Greg"
+  },
+  "learnedPreferences": [],
+  "automation": {
+    "confidenceBarrier": true
+  },
+  "notifications": {
+    "draftReady": true
+  },
+  "privacy": {
+    "aiTraining": true
+  }
+}
