@@ -3,11 +3,12 @@
 
 generator client {
   provider = "prisma-client-js"
-  engineType = "binary"
+  engineType = "library"
 }
 
 datasource db {
   provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model User {
@@ -61,7 +62,7 @@ model Email {
   receivedAt     DateTime
   isRead         Boolean        @default(false)
   isStarred      Boolean        @default(false)
-  labels         Json?
+  labels         String?
   status         String         @default("new") // "new", "analysed", "draft_ready", "sent", "archived", "snoozed"
   analysis       EmailAnalysis?
   drafts         EmailDraft[]
@@ -77,10 +78,10 @@ model EmailAnalysis {
   emailType         String?
   priority          Int?
   priorityReason    String?
-  summary           Json?
+  summary           String?
   tone              String?
   intent            String?
-  extractedEntities Json?
+  extractedEntities String?
   recommendedAction String?
   shouldAutoReply   Boolean  @default(false)
   confidenceScore   Float?
@@ -125,10 +126,10 @@ model UserStyleProfile {
   tone              String?
   lengthPreference  String?
   signOff           String?
-  preferredPhrases  Json?
-  avoidedPhrases    Json?
-  topics            Json?
-  languages         Json?
+  preferredPhrases  String?
+  avoidedPhrases    String?
+  topics            String?
+  languages         String?
   confidenceScore   Float    @default(0)
   lastUpdatedAt     DateTime @updatedAt
 }
@@ -151,8 +152,8 @@ model AutomationRule {
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name                String
   isActive            Boolean  @default(true)
-  triggerConditions   Json
-  actions             Json
+  triggerConditions   String
+  actions             String
   confidenceThreshold Float    @default(0.8)
   timesTriggered      Int      @default(0)
   createdAt           DateTime @default(now())
@@ -165,7 +166,7 @@ model Template {
   name       String
   subject    String?
   body       String
-  variables  Json?
+  variables  String?
   usageCount Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -197,6 +198,6 @@ model AnalyticsEvent {
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   eventType  String
-  metadata   Json?
+  metadata   String?
   occurredAt DateTime @default(now())
 }

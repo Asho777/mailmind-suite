@@ -16,9 +16,13 @@ import {
   RefreshCw,
   Lock,
   Eye,
+  EyeOff,
   Activity,
   LogOut,
-  Save
+  Save,
+  Cpu,
+  CheckCircle2,
+  XCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,25 +44,138 @@ export default function SettingsPage() {
   const [userData, setUserData] = useState<any>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
 
+  // Pending local state for sections with Save buttons
+  const [pendingAutomation, setPendingAutomation] = useState<Record<string, boolean>>({});
+  const [pendingNotifications, setPendingNotifications] = useState<Record<string, boolean>>({});
+  const [pendingPrivacy, setPendingPrivacy] = useState<Record<string, boolean>>({});
+  const [sectionSaveStatus, setSectionSaveStatus] = useState<Record<string, "idle"|"saved">>({
+    automation: "idle", notifications: "idle", privacy: "idle"
+  });
+
+  // AI Connection state
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [aiEncKey, setAiEncKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [showEncKey, setShowEncKey] = useState(false);
+  const [aiKeyStatus, setAiKeyStatus] = useState<{ set: boolean; preview: string }>({ set: false, preview: "" });
+  const [encKeyStatus, setEncKeyStatus] = useState<{ set: boolean; preview: string }>({ set: false, preview: "" });
+  const [aiTestStatus, setAiTestStatus] = useState<"idle"|"testing"|"ok"|"fail">("idle");
+  const [aiTestMessage, setAiTestMessage] = useState("");
+  const [aiSaveStatus, setAiSaveStatus] = useState<"idle"|"saving"|"saved"|"error">("idle");
+
   useEffect(() => {
     const loadData = async () => {
+      // Read locally-saved toggle states FIRST — these always take priority
+      const localSettings = localStorage.getItem("mailmind_settings");
+      let localParsed: any = null;
+      if (localSettings) {
+        try {
+          localParsed = JSON.parse(localSettings);
+          // Immediately apply saved toggle states so they are never overwritten
+          if (localParsed.automation)    setPendingAutomation(localParsed.automation);
+          if (localParsed.notifications) setPendingNotifications(localParsed.notifications);
+          if (localParsed.privacy)       setPendingPrivacy(localParsed.privacy);
+        } catch {}
+      }
+
       try {
         const res = await fetch("/api/user-settings");
         if (!res.ok) throw new Error("Failed to load");
         const contentType = res.headers.get("content-type");
         if (contentType && contentType.indexOf("application/json") !== -1) {
           const data = await res.json();
-          setUserData(data);
+          // Merge API profile data but KEEP localStorage toggle values
+          setUserData((prev: any) => ({
+            ...data,
+            automation:    localParsed?.automation    ?? data.automation    ?? {},
+            notifications: localParsed?.notifications ?? data.notifications ?? {},
+            privacy:       localParsed?.privacy       ?? data.privacy       ?? {},
+          }));
         }
       } catch (err) {
-        console.error("Settings load error:", err);
-        setSaveStatus("error");
+        // API unavailable — just use localStorage data for everything
+        if (localParsed) setUserData(localParsed);
+        console.error("Settings load error (using local cache):", err);
       } finally {
         setIsLoading(false);
       }
     };
     loadData();
   }, []);
+
+  const saveSectionLocally = (section: string, data: Record<string, boolean>) => {
+    const updated = { ...userData, [section]: { ...(userData?.[section] || {}), ...data } };
+    setUserData(updated);
+    localStorage.setItem("mailmind_settings", JSON.stringify(updated));
+    setSectionSaveStatus(prev => ({ ...prev, [section]: "saved" }));
+    setTimeout(() => setSectionSaveStatus(prev => ({ ...prev, [section]: "idle" })), 2500);
+  };
+
+  // Load current AI key status from the server on mount
+  useEffect(() => {
+    fetch("/api/settings/ai-connection")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) {
+          setAiKeyStatus({ set: d.apiKeySet, preview: d.apiKeyPreview });
+          setEncKeyStatus({ set: d.encKeySet, preview: d.encKeyPreview });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleTestAiConnection = async () => {
+    setAiTestStatus("testing");
+    setAiTestMessage("");
+    const keyToTest = aiApiKey.trim() || "";
+    try {
+      const res = await fetch("/api/settings/ai-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test", apiKey: keyToTest }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAiTestStatus("ok");
+        setAiTestMessage(data.message);
+      } else {
+        setAiTestStatus("fail");
+        setAiTestMessage(data.error);
+      }
+    } catch {
+      setAiTestStatus("fail");
+      setAiTestMessage("Could not reach the server. Is the app running?");
+    }
+  };
+
+  const handleSaveAiKeys = async () => {
+    setAiSaveStatus("saving");
+    try {
+      const res = await fetch("/api/settings/ai-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", apiKey: aiApiKey.trim(), encryptionKey: aiEncKey.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAiSaveStatus("saved");
+        // Refresh key status preview
+        const statusRes = await fetch("/api/settings/ai-connection");
+        const statusData = await statusRes.json();
+        setAiKeyStatus({ set: statusData.apiKeySet, preview: statusData.apiKeyPreview });
+        setEncKeyStatus({ set: statusData.encKeySet, preview: statusData.encKeyPreview });
+        setAiApiKey("");
+        setAiEncKey("");
+        setTimeout(() => setAiSaveStatus("idle"), 3000);
+      } else {
+        setAiSaveStatus("error");
+        setTimeout(() => setAiSaveStatus("idle"), 3000);
+      }
+    } catch {
+      setAiSaveStatus("error");
+      setTimeout(() => setAiSaveStatus("idle"), 3000);
+    }
+  };
 
   const handleUpdate = async (type: string, data: any) => {
     setSaveStatus("saving");
@@ -132,6 +249,7 @@ export default function SettingsPage() {
           {[
             { id: "account", label: "Account", icon: UserIcon },
             { id: "accounts", label: "Connected Emails", icon: Mail },
+            { id: "ai-connection", label: "AI Connection", icon: Cpu },
             { id: "style", label: "My Style", icon: Palette },
             { id: "automation", label: "Automation", icon: Zap },
             { id: "notifications", label: "Notifications", icon: Bell },
@@ -155,6 +273,198 @@ export default function SettingsPage() {
 
         {/* Settings Content */}
         <div className="flex-1 space-y-8">
+
+          {activeSection === "ai-connection" && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {/* Header card */}
+              <div className="relative p-8 rounded-2xl bg-gradient-to-br from-indigo-600/10 to-slate-900/50 border border-indigo-500/20 overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-600/10 blur-[80px] pointer-events-none" />
+                <div className="flex items-center gap-5 relative z-10">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 flex items-center justify-center">
+                    <Cpu className="w-8 h-8 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold">AI Connection</h2>
+                    <p className="text-slate-400 text-sm">Connect MailMind to OpenAI to enable intelligent email drafting and analysis.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Current Key Status */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={cn(
+                  "p-5 rounded-xl border flex items-center gap-4",
+                  aiKeyStatus.set ? "bg-emerald-500/5 border-emerald-500/20" : "bg-slate-900/50 border-slate-800"
+                )}>
+                  {aiKeyStatus.set
+                    ? <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+                    : <XCircle className="w-6 h-6 text-slate-600 shrink-0" />}
+                  <div>
+                    <div className="text-sm font-bold text-slate-200">OpenAI API Key</div>
+                    <div className="text-xs text-slate-500">
+                      {aiKeyStatus.set ? `Active: ${aiKeyStatus.preview}` : "Not configured"}
+                    </div>
+                  </div>
+                </div>
+                <div className={cn(
+                  "p-5 rounded-xl border flex items-center gap-4",
+                  encKeyStatus.set ? "bg-emerald-500/5 border-emerald-500/20" : "bg-slate-900/50 border-slate-800"
+                )}>
+                  {encKeyStatus.set
+                    ? <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+                    : <XCircle className="w-6 h-6 text-slate-600 shrink-0" />}
+                  <div>
+                    <div className="text-sm font-bold text-slate-200">Encryption Key</div>
+                    <div className="text-xs text-slate-500">
+                      {encKeyStatus.set ? `Active: ${encKeyStatus.preview}` : "Not configured"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Input form */}
+              <div className="bg-slate-900/50 rounded-2xl border border-slate-800 p-8 space-y-6">
+                <h3 className="font-bold text-slate-200 text-lg">Enter New Keys</h3>
+                <p className="text-sm text-slate-500">Your keys are written directly into your local <code className="bg-slate-800 px-1.5 py-0.5 rounded text-indigo-300">.env</code> file and never leave your machine.</p>
+
+                {/* OpenAI API Key */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">OpenAI API Key</label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={aiApiKey}
+                      onChange={e => setAiApiKey(e.target.value)}
+                      placeholder="sk-••••••••••••••••••••••••••••••••••••"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 pr-12 text-sm font-mono focus:ring-2 focus:ring-indigo-600/50 outline-none transition-all"
+                    />
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-600">Get your key from <span className="text-indigo-400">platform.openai.com/api-keys</span></p>
+                </div>
+
+                {/* Encryption Key */}
+                <div className="space-y-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Encryption Key</label>
+
+                  {/* Plain-English explanation */}
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-sm text-slate-400 space-y-2 leading-relaxed">
+                    <p>
+                      <span className="font-bold text-slate-200">What is this?</span> — This is a private password that <span className="text-indigo-300">you create yourself</span>. MailMind uses it to scramble your stored email passwords on your hard drive so they cannot be read by anyone who opens your files.
+                    </p>
+                    <p>
+                      <span className="font-bold text-slate-200">Where do I get it?</span> — You don&apos;t. You simply <span className="text-indigo-300">make one up</span>, or use the &quot;Generate for Me&quot; button below. It must be <span className="text-amber-300 font-bold">exactly 32 characters long</span>. Write it down somewhere safe — without it, stored email passwords cannot be decrypted.
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type={showEncKey ? "text" : "password"}
+                      value={aiEncKey}
+                      onChange={e => setAiEncKey(e.target.value)}
+                      placeholder="Click 'Generate for Me' or type your own 32-character key"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 pr-12 text-sm font-mono focus:ring-2 focus:ring-indigo-600/50 outline-none transition-all"
+                    />
+                    <button
+                      onClick={() => setShowEncKey(!showEncKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                      {showEncKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {/* Character counter + generate button */}
+                  <div className="flex items-center justify-between">
+                    <span className={cn(
+                      "text-xs font-bold",
+                      aiEncKey.length === 0 && "text-slate-600",
+                      aiEncKey.length > 0 && aiEncKey.length < 32 && "text-amber-400",
+                      aiEncKey.length === 32 && "text-emerald-400",
+                      aiEncKey.length > 32 && "text-red-400",
+                    )}>
+                      {aiEncKey.length === 0 && "0 / 32 characters"}
+                      {aiEncKey.length > 0 && aiEncKey.length < 32 && `${aiEncKey.length} / 32 — needs ${32 - aiEncKey.length} more characters`}
+                      {aiEncKey.length === 32 && "✅ Perfect — exactly 32 characters"}
+                      {aiEncKey.length > 32 && `❌ Too long — ${aiEncKey.length - 32} character(s) over the limit`}
+                    </span>
+                    <button
+                      onClick={() => {
+                        // Generate a cryptographically random 32-char key using browser crypto API
+                        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+                        const arr = new Uint8Array(32);
+                        crypto.getRandomValues(arr);
+                        const key = Array.from(arr).map(b => chars[b % chars.length]).join("");
+                        setAiEncKey(key);
+                        setShowEncKey(true); // Show it so user can copy it
+                      }}
+                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-1.5 rounded-lg transition-all"
+                    >
+                      <Zap className="w-3 h-3" /> Generate for Me
+                    </button>
+                  </div>
+                  <p className="text-xs text-amber-400/80 font-medium">⚠️ Important: Copy and store this key in a safe place (e.g. a password manager). If you lose it, your stored email passwords cannot be recovered.</p>
+                </div>
+
+                {/* Test Result */}
+                {aiTestStatus !== "idle" && (
+                  <div className={cn(
+                    "flex items-start gap-3 p-4 rounded-xl text-sm border animate-in fade-in duration-300",
+                    aiTestStatus === "testing" && "bg-slate-800/50 border-slate-700 text-slate-400",
+                    aiTestStatus === "ok"      && "bg-emerald-500/10 border-emerald-500/20 text-emerald-300",
+                    aiTestStatus === "fail"    && "bg-red-500/10 border-red-500/20 text-red-300",
+                  )}>
+                    {aiTestStatus === "testing" && <RefreshCw className="w-4 h-4 mt-0.5 animate-spin shrink-0" />}
+                    {aiTestStatus === "ok"      && <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />}
+                    {aiTestStatus === "fail"    && <XCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+                    <span>{aiTestStatus === "testing" ? "Testing connection to OpenAI..." : aiTestMessage}</span>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    onClick={handleTestAiConnection}
+                    disabled={aiTestStatus === "testing"}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10 transition-all disabled:opacity-50"
+                  >
+                    {aiTestStatus === "testing"
+                      ? <><RefreshCw className="w-4 h-4 animate-spin" /> Testing...</>
+                      : <><Activity className="w-4 h-4" /> Test Connection</>}
+                  </button>
+                  <button
+                    onClick={handleSaveAiKeys}
+                    disabled={aiSaveStatus === "saving" || (!aiApiKey.trim() && !aiEncKey.trim())}
+                    className={cn(
+                      "flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg disabled:opacity-50",
+                      aiSaveStatus === "saved"  && "bg-emerald-600 text-white shadow-emerald-600/20",
+                      aiSaveStatus === "error"  && "bg-red-600 text-white",
+                      aiSaveStatus === "saving" && "bg-indigo-600/50 text-white",
+                      (aiSaveStatus === "idle") && "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20",
+                    )}
+                  >
+                    {aiSaveStatus === "saving" && <><RefreshCw className="w-4 h-4 animate-spin" /> Saving...</>}
+                    {aiSaveStatus === "saved"  && <><CheckCircle2 className="w-4 h-4" /> Keys Saved to .env!</>}
+                    {aiSaveStatus === "error"  && <><XCircle className="w-4 h-4" /> Save Failed</>}
+                    {aiSaveStatus === "idle"   && <><Save className="w-4 h-4" /> Save Keys to .env</>}
+                  </button>
+                </div>
+              </div>
+
+              {/* Security notice */}
+              <div className="flex items-start gap-3 p-5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-sm text-amber-200/80">
+                <Lock className="w-5 h-5 shrink-0 mt-0.5 text-amber-400" />
+                <div>
+                  <strong>Security Notice:</strong> Your keys are stored in the local <code className="bg-amber-900/30 px-1 rounded">.env</code> file on your HDD and are never transmitted to any external server. Keep a backup of this file in a secure location.
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeSection === "accounts" && (
             <div className="space-y-6">
               <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-6">
@@ -598,7 +908,7 @@ export default function SettingsPage() {
                     { key: "confidenceBarrier", title: "Confidence Barrier", desc: "Only take action if AI confidence is above 85%." },
                     { key: "weeklyInsights", title: "Weekly Insights", desc: "Receive a summary of time saved and AI actions." },
                   ].map((item, i) => {
-                    const isActive = userData?.automation?.[item.key];
+                    const isActive = pendingAutomation[item.key] ?? false;
                     return (
                       <div key={i} className="flex items-center justify-between p-4 bg-slate-950 rounded-lg border border-slate-800">
                         <div>
@@ -606,7 +916,7 @@ export default function SettingsPage() {
                           <div className="text-xs text-slate-500">{item.desc}</div>
                         </div>
                         <button 
-                          onClick={() => handleUpdate("automation", { [item.key]: !isActive })}
+                          onClick={() => setPendingAutomation(prev => ({ ...prev, [item.key]: !isActive }))}
                           className={cn(
                             "w-12 h-6 rounded-full relative transition-all duration-300",
                             isActive ? "bg-indigo-600" : "bg-slate-800"
@@ -620,6 +930,20 @@ export default function SettingsPage() {
                       </div>
                     );
                   })}
+                </div>
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={() => saveSectionLocally("automation", pendingAutomation)}
+                    className={cn(
+                      "flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg",
+                      sectionSaveStatus.automation === "saved"
+                        ? "bg-emerald-600 text-white shadow-emerald-600/20"
+                        : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20"
+                    )}
+                  >
+                    <Save className="w-4 h-4" />
+                    {sectionSaveStatus.automation === "saved" ? "Saved!" : "Save Changes"}
+                  </button>
                 </div>
               </div>
             </div>
@@ -639,7 +963,7 @@ export default function SettingsPage() {
                     { key: "dailyDigest", title: "Daily Digest", desc: "Send a summary of all emails handled today." },
                     { key: "draftReady", title: "Draft Ready Notifications", desc: "Alert when a complex draft needs your review." },
                   ].map((item, i) => {
-                    const isActive = userData?.notifications?.[item.key];
+                    const isActive = pendingNotifications[item.key] ?? false;
                     return (
                       <div key={i} className="flex items-center justify-between p-4 bg-slate-950 rounded-lg border border-slate-800">
                         <div>
@@ -647,7 +971,7 @@ export default function SettingsPage() {
                           <div className="text-xs text-slate-500">{item.desc}</div>
                         </div>
                         <button 
-                          onClick={() => handleUpdate("notifications", { [item.key]: !isActive })}
+                          onClick={() => setPendingNotifications(prev => ({ ...prev, [item.key]: !isActive }))}
                           className={cn(
                             "w-12 h-6 rounded-full relative transition-all duration-300",
                             isActive ? "bg-indigo-600" : "bg-slate-800"
@@ -661,6 +985,20 @@ export default function SettingsPage() {
                       </div>
                     );
                   })}
+                </div>
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={() => saveSectionLocally("notifications", pendingNotifications)}
+                    className={cn(
+                      "flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg",
+                      sectionSaveStatus.notifications === "saved"
+                        ? "bg-emerald-600 text-white shadow-emerald-600/20"
+                        : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20"
+                    )}
+                  >
+                    <Save className="w-4 h-4" />
+                    {sectionSaveStatus.notifications === "saved" ? "Saved!" : "Save Changes"}
+                  </button>
                 </div>
               </div>
             </div>
@@ -694,25 +1032,39 @@ export default function SettingsPage() {
                       <div className="text-xs text-slate-500">Allow your edits to fine-tune your local model. No data leaves your instance.</div>
                     </div>
                     <button 
-                      onClick={() => handleUpdate("privacy", { aiTraining: !userData?.privacy?.aiTraining })}
+                      onClick={() => setPendingPrivacy(prev => ({ ...prev, aiTraining: !(pendingPrivacy.aiTraining ?? false) }))}
                       className={cn(
                         "w-12 h-6 rounded-full relative transition-all duration-300",
-                        userData?.privacy?.aiTraining ? "bg-indigo-600" : "bg-slate-800"
+                        (pendingPrivacy.aiTraining ?? false) ? "bg-indigo-600" : "bg-slate-800"
                       )}
                     >
                       <div className={cn(
                         "absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300",
-                        userData?.privacy?.aiTraining ? "left-7" : "left-1"
+                        (pendingPrivacy.aiTraining ?? false) ? "left-7" : "left-1"
                       )} />
                     </button>
                   </div>
-                  
-                  <button 
-                    onClick={handleDownloadData}
-                    className="w-full p-4 bg-slate-900 border border-slate-800 rounded-xl text-sm font-bold text-slate-300 hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
-                  >
-                    Download My Data (JSON)
-                  </button>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <button 
+                      onClick={handleDownloadData}
+                      className="flex-1 p-4 bg-slate-900 border border-slate-800 rounded-xl text-sm font-bold text-slate-300 hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                    >
+                      Download My Data (JSON)
+                    </button>
+                    <button
+                      onClick={() => saveSectionLocally("privacy", pendingPrivacy)}
+                      className={cn(
+                        "flex items-center gap-2 px-6 py-4 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg",
+                        sectionSaveStatus.privacy === "saved"
+                          ? "bg-emerald-600 text-white shadow-emerald-600/20"
+                          : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20"
+                      )}
+                    >
+                      <Save className="w-4 h-4" />
+                      {sectionSaveStatus.privacy === "saved" ? "Saved!" : "Save Changes"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -7,9 +7,18 @@
   "styleProfile": {
     "tone": "Semi-Formal",
     "lengthPreference": "Balanced",
-    "signOff": "Best regards, Greg"
+    "signOff": "Best Regards Greg."
   },
-  "learnedPreferences": [],
+  "learnedPreferences": [
+    {
+      "pref": "Newly learned pattern from sample...",
+      "confidence": "80%"
+    },
+    {
+      "pref": "Newly learned pattern from sample...",
+      "confidence": "80%"
+    }
+  ],
   "automation": {
     "confidenceBarrier": true
   },

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Zap, 
   Eye, 
@@ -13,7 +13,8 @@ import {
   CheckCircle,
   AlertCircle,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Save
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import RuleModal from "@/components/modals/RuleModal";
@@ -57,7 +58,7 @@ const automationModes = [
   },
 ];
 
-const mockRules = [
+const DEFAULT_RULES: Rule[] = [
   {
     id: "1",
     name: "Security Alerts",
@@ -81,16 +82,34 @@ const mockRules = [
   },
 ];
 
+const STORAGE_KEY = "mailmind_automation_settings";
+
 export default function AutomationPage() {
   const [selectedMode, setSelectedMode] = useState("review");
-  const [rules, setRules] = useState(mockRules);
+  const [rules, setRules] = useState<Rule[]>(DEFAULT_RULES);
   const [confidence, setConfidence] = useState(85);
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved">("idle");
 
-  const handleSaveMode = (modeId: string) => {
-    setSelectedMode(modeId);
-    alert(`${automationModes.find(m => m.id === modeId)?.name} activated!`);
+  // Load from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.selectedMode) setSelectedMode(parsed.selectedMode);
+        if (parsed.rules) setRules(parsed.rules);
+        if (parsed.confidence !== undefined) setConfidence(parsed.confidence);
+      } catch {}
+    }
+  }, []);
+
+  const handleSaveAll = () => {
+    const payload = { selectedMode, rules, confidence };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    setSaveStatus("saved");
+    setTimeout(() => setSaveStatus("idle"), 2500);
   };
 
   const toggleRule = (id: string) => {
@@ -123,9 +142,26 @@ export default function AutomationPage() {
 
   return (
     <div className="max-w-5xl mx-auto py-10 px-6 space-y-12">
-      <div>
-        <h1 className="text-3xl font-bold mb-2">Automation Centre</h1>
-        <p className="text-slate-400">Configure how MailMind handles your inbox autonomously.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Automation Centre</h1>
+          <p className="text-slate-400">Configure how MailMind handles your inbox autonomously.</p>
+        </div>
+        {/* Global Save Button */}
+        <button
+          onClick={handleSaveAll}
+          className={cn(
+            "flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg",
+            saveStatus === "saved"
+              ? "bg-emerald-600 text-white shadow-emerald-600/20"
+              : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20"
+          )}
+        >
+          {saveStatus === "saved"
+            ? <><CheckCircle className="w-4 h-4" /> Settings Saved!</>
+            : <><Save className="w-4 h-4" /> Save All Settings</>
+          }
+        </button>
       </div>
 
       {/* Automation Modes */}
@@ -137,7 +173,7 @@ export default function AutomationPage() {
           {automationModes.map((mode) => (
             <button
               key={mode.id}
-              onClick={() => handleSaveMode(mode.id)}
+              onClick={() => setSelectedMode(mode.id)}
               className={cn(
                 "flex flex-col p-6 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group",
                 selectedMode === mode.id 
@@ -259,10 +295,29 @@ export default function AutomationPage() {
             {confidence > 80 ? `${confidence}% is High Confidence` : `${confidence}% is Balanced`}
           </div>
           <div className="flex items-center gap-2 text-xs font-bold text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700">
-            <Clock className="w-3.5 h-3.5" /> Updated just now
+            <Clock className="w-3.5 h-3.5" /> 
+            {saveStatus === "saved" ? "Saved!" : "Unsaved changes"}
           </div>
         </div>
       </section>
+
+      {/* Bottom Save Reminder */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSaveAll}
+          className={cn(
+            "flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg",
+            saveStatus === "saved"
+              ? "bg-emerald-600 text-white shadow-emerald-600/20"
+              : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20"
+          )}
+        >
+          {saveStatus === "saved"
+            ? <><CheckCircle className="w-4 h-4" /> All Settings Saved!</>
+            : <><Save className="w-4 h-4" /> Save All Settings</>
+          }
+        </button>
+      </div>
 
       <RuleModal 
         isOpen={isRuleModalOpen}

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 export default function AnalyticsPage() {
   const [range, setRange] = React.useState("30D");
+  const [showHistory, setShowHistory] = React.useState(false);
 
   // Dynamic Mock Data based on Range
   const getData = (r: string) => {
@@ -189,7 +190,7 @@ export default function AnalyticsPage() {
                   <span className="text-slate-100 font-bold">{p.count}</span>
                 </div>
                 <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                  <div className={cn("h-full rounded-full transition-all duration-1000", (p as any).color || "bg-indigo-500")} style={{ width: `${p.percent}%` }} />
+                  <div className={cn("h-full rounded-full transition-all duration-1000", "bg-indigo-500")} style={{ width: `${p.percent}%` }} />
                 </div>
               </div>
             ))}
@@ -204,27 +205,60 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </div>
-      {/* ... rest of page (Time Saved Deep Dive) ... */}
-      <div className="p-8 rounded-2xl bg-gradient-to-br from-indigo-600/10 via-slate-900/50 to-slate-900/50 border border-indigo-500/20">
-        <div className="flex flex-col md:flex-row items-center gap-8">
-          <div className="w-32 h-32 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 flex items-center justify-center relative shadow-[0_0_20px_rgba(99,102,241,0.3)]">
-            <div className="text-center">
-              <div className="text-2xl font-bold">{currentData.timeSaved.split(' ')[0]}</div>
-              <div className="text-[10px] text-slate-500 font-bold uppercase">Hours</div>
+
+      <div className="space-y-6">
+        <div className="p-8 rounded-2xl bg-gradient-to-br from-indigo-600/10 via-slate-900/50 to-slate-900/50 border border-indigo-500/20">
+          <div className="flex flex-col md:flex-row items-center gap-8">
+            <div className="w-32 h-32 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 flex items-center justify-center relative shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+              <div className="text-center">
+                <div className="text-2xl font-bold">{currentData.timeSaved.split(' ')[0]}</div>
+                <div className="text-[10px] text-slate-500 font-bold uppercase">Hours</div>
+              </div>
+            </div>
+            <div className="flex-1 text-center md:text-left space-y-2">
+              <h3 className="text-xl font-bold flex items-center gap-2 justify-center md:justify-start">
+                <CheckCircle className="w-5 h-5 text-emerald-400" /> Efficiency across {range}!
+              </h3>
+              <p className="text-slate-400 leading-relaxed max-w-xl">
+                Based on your selection, MailMind has handled {currentData.autoHandled} interactions autonomously, reclaiming significant time for your core business.
+              </p>
+            </div>
+            <button 
+              onClick={() => setShowHistory(!showHistory)}
+              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full font-bold shadow-xl shadow-indigo-600/20 transition-all active:scale-95"
+            >
+              {showHistory ? "Hide Time History" : "View Time History"}
+            </button>
+          </div>
+        </div>
+
+        {showHistory && (
+          <div className="p-8 rounded-2xl bg-slate-900/30 border border-slate-800 animate-in fade-in slide-in-from-top-4 duration-500">
+            <h4 className="text-lg font-bold mb-6 flex items-center gap-2 text-indigo-400">
+              <Clock className="w-5 h-5" /> Detailed Time History
+            </h4>
+            <div className="space-y-4">
+              {[
+                { date: "May 10, 2026", action: "Bulk Auto-Categorization", time: "45 mins", saved: "12 mins" },
+                { date: "May 09, 2026", action: "AI Draft Generation (24 items)", time: "2.5 hrs", saved: "1.2 hrs" },
+                { date: "May 08, 2026", action: "Automated Rules Cleanup", time: "1 hr", saved: "30 mins" },
+                { date: "May 07, 2026", action: "Smart Filter Application", time: "15 mins", saved: "5 mins" },
+                { date: "May 06, 2026", action: "AI Reply Orchestration", time: "4 hrs", saved: "2.1 hrs" },
+              ].map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between p-4 rounded-xl bg-slate-900/50 border border-slate-800/50 hover:bg-slate-800/50 transition-colors">
+                  <div>
+                    <div className="text-sm font-bold text-slate-200">{item.action}</div>
+                    <div className="text-xs text-slate-500">{item.date}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-emerald-400">+{item.saved} saved</div>
+                    <div className="text-[10px] text-slate-600 uppercase font-bold">Total Duration: {item.time}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="flex-1 text-center md:text-left space-y-2">
-            <h3 className="text-xl font-bold flex items-center gap-2 justify-center md:justify-start">
-              <CheckCircle className="w-5 h-5 text-emerald-400" /> Efficiency across {range}!
-            </h3>
-            <p className="text-slate-400 leading-relaxed max-w-xl">
-              Based on your selection, MailMind has handled {currentData.autoHandled} interactions autonomously, reclaiming significant time for your core business.
-            </p>
-          </div>
-          <button className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full font-bold shadow-xl shadow-indigo-600/20 transition-all active:scale-95">
-            View Time History
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );

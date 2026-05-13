@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchRecentEmails } from "@/lib/mail/imap";
-// import { prisma } from "@/lib/db"; // Temporarily bypassed
+import { prisma } from "@/lib/db";
+import { encryptPassword } from "@/lib/encryption";
 
 export async function POST(req: Request) {
   try {
@@ -27,16 +28,48 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Connection failed: ${error.message}` }, { status: 400 });
     }
 
-    // 2. Mock Save (In a real app, save to file-store or DB)
-    // Since we are using file-store for settings, we could add accounts there too
-    console.log("📝 Mock saving account details...");
+    // 2. Encrypt password and save to database
+    console.log("📝 Saving encrypted account details to database...");
+    
+    // In a real app we'd have proper user authentication, 
+    // here we use a dummy user or fetch the first user.
+    let user = await prisma.user.findFirst();
+    if (!user) {
+      user = await prisma.user.create({
+        data: { email: "localuser@mailmind.local", name: "Local User" }
+      });
+    }
+
+    const encryptedPassword = encryptPassword(password);
+
+    const account = await prisma.connectedAccount.upsert({
+      where: {
+        userId_emailAddress: {
+          userId: user.id,
+          emailAddress: email
+        }
+      },
+      update: {
+        accessToken: encryptedPassword,
+        provider: "imap",
+        isActive: true
+      },
+      create: {
+        userId: user.id,
+        provider: "imap",
+        emailAddress: email,
+        accessToken: encryptedPassword,
+        isActive: true
+      }
+    });
 
     return NextResponse.json({ 
       success: true, 
-      account: { emailAddress: email, provider: "imap" } 
+      account: { emailAddress: account.emailAddress, provider: account.provider } 
     });
   } catch (error: any) {
     console.error("Account connection error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+

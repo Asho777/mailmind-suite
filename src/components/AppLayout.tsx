@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
   Inbox, 
-  Send, 
   CheckCircle, 
   AlertCircle, 
   Clock, 
@@ -17,30 +16,73 @@ import {
   Menu,
   X,
   Search,
-  Plus
+  Plus,
+  HelpCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ComposeModal from "./modals/ComposeModal";
 
-const navigation = [
-  { name: "Inbox", href: "/", icon: Inbox, count: 12 },
-  { name: "AI Queue", href: "/ai-queue", icon: Zap },
-  { name: "Handled", href: "/handled", icon: CheckCircle },
-  { name: "Review Needed", href: "/review", icon: AlertCircle, count: 3 },
-  { name: "Snoozed", href: "/snoozed", icon: Clock },
-  { name: "Analytics", href: "/analytics", icon: BarChart2 },
-  { name: "Automation", href: "/automation", icon: Settings },
-  { name: "Contacts", href: "/contacts", icon: Users },
-  { name: "Templates", href: "/templates", icon: FileText },
+// Static nav items with localStorage keys for live counts
+const navItems = [
+  { name: "Inbox",            href: "/",             icon: Inbox,        storageKey: "mailmind_inbox" },
+  { name: "AI Queue",         href: "/ai-queue",     icon: Zap,          storageKey: "mailmind_queue" },
+  { name: "Handled",          href: "/handled",      icon: CheckCircle,  storageKey: "mailmind_handled" },
+  { name: "Review Needed",    href: "/review",       icon: AlertCircle,  storageKey: "mailmind_review" },
+  { name: "Snoozed",          href: "/snoozed",      icon: Clock,        storageKey: "mailmind_snoozed" },
+  { name: "Analytics",        href: "/analytics",    icon: BarChart2,    storageKey: null },
+  { name: "Automation",       href: "/automation",   icon: Settings,     storageKey: null },
+  { name: "Contacts",         href: "/contacts",     icon: Users,        storageKey: null },
+  { name: "Templates",        href: "/templates",    icon: FileText,     storageKey: null },
+  { name: "User Instructions",href: "/instructions", icon: HelpCircle,   storageKey: null },
 ];
+
+const STORAGE_KEYS = [
+  "mailmind_inbox",
+  "mailmind_queue",
+  "mailmind_handled",
+  "mailmind_review",
+  "mailmind_snoozed",
+];
+const DATA_VERSION = "v3"; // bump this to force-clear stale mock data
+
+function useLiveCounts() {
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  const refresh = async () => {
+    try {
+      const res = await fetch("/api/emails?counts=true");
+      if (res.ok) {
+        const data = await res.json();
+        setCounts({
+          mailmind_inbox: data.inbox || 0,
+          mailmind_queue: data.queue || 0,
+          mailmind_review: data.review || 0,
+          mailmind_handled: data.handled || 0,
+          mailmind_snoozed: data.snoozed || 0,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch counts:", err);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return counts;
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isComposeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState("");
+  const counts = useLiveCounts();
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleOpenCompose = (e: any) => {
       if (e.detail?.to) setComposeTo(e.detail.to);
       setComposeOpen(true);
@@ -51,7 +93,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-50 font-sans selection:bg-indigo-500/30">
-      {/* ... existing code ... */}
       <aside 
         className={cn(
           "fixed inset-y-0 left-0 z-50 w-64 bg-slate-900/50 backdrop-blur-xl border-r border-slate-800 transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
@@ -77,8 +118,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
+            {navItems.map((item) => {
               const isActive = pathname === item.href;
+              const liveCount = item.storageKey ? (counts[item.storageKey] ?? 0) : 0;
               return (
                 <Link
                   key={item.name}
@@ -97,9 +139,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   {isSidebarOpen && (
                     <div className="flex items-center justify-between flex-1">
                       <span className="text-sm font-medium">{item.name}</span>
-                      {item.count && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-800 rounded-md text-slate-400">
-                          {item.count}
+                      {item.storageKey && (
+                        <span className={cn(
+                          "px-1.5 py-0.5 text-[10px] font-bold rounded-md",
+                          liveCount > 0
+                            ? "bg-indigo-600/20 text-indigo-300"
+                            : "bg-slate-800 text-slate-600"
+                        )}>
+                          {liveCount}
                         </span>
                       )}
                     </div>
@@ -109,7 +156,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          {/* User Profile / Settings */}
+          {/* Settings */}
           <div className="p-4 border-t border-slate-800">
             <Link 
               href="/settings"

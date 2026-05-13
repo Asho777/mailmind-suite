@@ -190,8 +190,8 @@ export default function MailView({ title, emails: initialEmails, emptyMessage = 
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mr-2">{filteredEmails.length} messages</span>
             <select className="bg-transparent text-[10px] font-bold text-slate-400 border-none focus:ring-0 outline-none cursor-pointer uppercase tracking-widest">
-              <option>Newest First</option>
-              <option>Priority</option>
+              <option className="text-slate-900">Newest First</option>
+              <option className="text-slate-900">Priority</option>
             </select>
           </div>
         </div>

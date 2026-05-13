@@ -64,10 +64,33 @@ const initialEmails = [
 ];
 
 export default function InboxPage() {
-  const [emails, setEmails] = useState(initialEmails);
+  const [emails, setEmails] = useState<any[]>([]);
   const [selectedEmailIds, setSelectedEmailIds] = useState<string[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<any>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load from SQLite API on mount and poll
+  React.useEffect(() => {
+    const fetchEmails = async () => {
+      try {
+        const res = await fetch("/api/emails?status=inbox");
+        if (res.ok) {
+          const data = await res.json();
+          setEmails(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch inbox:", err);
+      } finally {
+        setIsLoaded(true);
+        setIsRefreshing(false);
+      }
+    };
+
+    fetchEmails();
+    const interval = setInterval(fetchEmails, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const toggleSelectAll = () => {
     if (selectedEmailIds.length === emails.length) {
@@ -86,23 +109,34 @@ export default function InboxPage() {
     }
   };
 
-  const handleAction = (action: string, id?: string) => {
+  const handleAction = async (action: string, id?: string) => {
     const idsToProcess = id ? [id] : selectedEmailIds;
     if (idsToProcess.length === 0) return;
 
-    if (action === "delete") {
-      setEmails(emails.filter(e => !idsToProcess.includes(e.id)));
-    } else if (action === "archive") {
-      setEmails(emails.filter(e => !idsToProcess.includes(e.id)));
-      alert(`${idsToProcess.length} email(s) archived.`);
-    } else if (action === "read") {
-      setEmails(emails.map(e => idsToProcess.includes(e.id) ? { ...e, isRead: true } : e));
-    } else if (action === "snooze") {
-      setEmails(emails.filter(e => !idsToProcess.includes(e.id)));
-      alert(`${idsToProcess.length} email(s) snoozed.`);
+    try {
+      const res = await fetch("/api/emails", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ids: idsToProcess }),
+      });
+      
+      if (res.ok) {
+        if (action === "delete") {
+          setEmails(emails.filter(e => !idsToProcess.includes(e.id)));
+        } else if (action === "archive") {
+          setEmails(emails.filter(e => !idsToProcess.includes(e.id)));
+          alert(`${idsToProcess.length} email(s) archived.`);
+        } else if (action === "read") {
+          setEmails(emails.map(e => idsToProcess.includes(e.id) ? { ...e, isRead: true } : e));
+        } else if (action === "snooze") {
+          setEmails(emails.filter(e => !idsToProcess.includes(e.id)));
+          alert(`${idsToProcess.length} email(s) snoozed.`);
+        }
+        setSelectedEmailIds([]);
+      }
+    } catch (err) {
+      console.error("Failed to update emails:", err);
     }
-
-    setSelectedEmailIds([]);
   };
 
   const refreshInbox = () => {
@@ -177,9 +211,9 @@ export default function InboxPage() {
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Sort:</span>
             <select className="bg-transparent text-xs font-semibold text-slate-300 border-none focus:ring-0 outline-none cursor-pointer">
-              <option>Newest First</option>
-              <option>Priority</option>
-              <option>Unread</option>
+              <option className="text-slate-900">Newest First</option>
+              <option className="text-slate-900">Priority</option>
+              <option className="text-slate-900">Unread</option>
             </select>
           </div>
           <div className="h-4 w-[1px] bg-slate-800" />

@@ -1,8 +1,9 @@
 "use client";
 
+import React, { useState, useEffect } from "react";
 import MailView from "@/components/MailView";
 
-const mockHandled = [
+const initialHandled = [
   {
     id: "h1",
     from: "Marketing Team",
@@ -28,11 +29,50 @@ const mockHandled = [
 ];
 
 export default function HandledPage() {
+  const [emails, setEmails] = useState<any[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const fetchEmails = async () => {
+      try {
+        const res = await fetch("/api/emails?status=archived");
+        if (res.ok) {
+          const data = await res.json();
+          setEmails(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch handled:", err);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+    
+    fetchEmails();
+    const interval = setInterval(fetchEmails, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleAction = async (action: string, ids: string[]) => {
+    try {
+      const res = await fetch("/api/emails", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ids }),
+      });
+      if (res.ok && action === "delete") {
+        setEmails(prev => prev.filter(e => !ids.includes(e.id)));
+      }
+    } catch (err) {
+      console.error("Action failed:", err);
+    }
+  };
+
   return (
     <MailView 
       title="Handled by AI" 
-      emails={mockHandled} 
+      emails={emails} 
       emptyMessage="No emails have been processed yet." 
+      onAction={handleAction}
     />
   );
 }

@@ -40,19 +40,28 @@ const initialQueue = [
 ];
 
 export default function AiQueuePage() {
-  const [queue, setQueue] = useState(initialQueue);
+  const [queue, setQueue] = useState<any[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Simulation: Remove an item after some "processing" time
   useEffect(() => {
-    if (queue.length === 0) return;
-
-    const timer = setTimeout(() => {
-      // Logic: Move the first item out of the queue (simulate AI finishing it)
-      // In a real app, this would happen via backend/websocket
-    }, 10000);
-
-    return () => clearTimeout(timer);
-  }, [queue]);
+    const fetchQueue = async () => {
+      try {
+        const res = await fetch("/api/emails?status=new");
+        if (res.ok) {
+          const data = await res.json();
+          setQueue(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch queue:", err);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+    
+    fetchQueue();
+    const interval = setInterval(fetchQueue, 3000); // Check frequently since it's the queue
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <MailView 
